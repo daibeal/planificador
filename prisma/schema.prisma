@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Itinerario {
+  id             String    @id @default(uuid())
+  nombre         String
+  destino        String
+  fechaInicio    DateTime
+  fechaFin       DateTime
+  presupuesto    Int?
+  transporte     String?
+  hospedaje      String?
+  notas          String?
+  etiquetas      String    @default("[]")
+  prioridad      String    @default("media")
+  estadoManual   String    @default("planificado")
+  colorTema      String    @default("#2563eb")
+  creadoEn       DateTime  @default(now())
+  actualizadoEn  DateTime  @updatedAt
+  actividades    Actividad[]
+}
+
+model Actividad {
+  id            String    @id @default(uuid())
+  itinerarioId  String
+  itinerario    Itinerario @relation(fields: [itinerarioId], references: [id], onDelete: Cascade)
+  titulo        String
+  descripcion   String?
+  ubicacion     String?
+  inicio        DateTime?
+  fin           DateTime?
+  color         String    @default("#14b8a6")
+  estado        String    @default("pendiente")
+  completado    Boolean   @default(false)
+  creadoEn      DateTime  @default(now())
+  actualizadoEn DateTime  @updatedAt
+}
