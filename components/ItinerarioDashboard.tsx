@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition, FormEvent } from "react";
+import { useMemo, useState, useTransition, FormEvent, useEffect } from "react";
 import clsx from "clsx";
 import {
   addDays,
@@ -19,6 +19,12 @@ import type {
   Itinerario,
   ItinerarioPayload,
 } from "@/types/itinerario";
+import {
+  saveToLocalStorage,
+  loadFromLocalStorage,
+  generateTempId,
+  isTempId,
+} from "@/lib/localStorage";
 
 interface Props {
   initialItinerarios: Itinerario[];
@@ -78,6 +84,27 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
   const [filtros, setFiltros] = useState<FiltrosItinerario>(filtrosBase);
   const [isPending, startTransition] = useTransition();
   const [enviando, setEnviando] = useState(false);
+  const [usingLocalStorage, setUsingLocalStorage] = useState(false);
+
+  // Load from localStorage on mount if no initial data
+  useEffect(() => {
+    if (initialItinerarios.length === 0) {
+      const localData = loadFromLocalStorage();
+      if (localData && localData.length > 0) {
+        setItinerarios(localData);
+        setUsingLocalStorage(true);
+        mostrarMensaje("Datos cargados desde localStorage (sin conexión al servidor)", "info");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Save to localStorage whenever itinerarios change
+  useEffect(() => {
+    if (itinerarios.length > 0) {
+      saveToLocalStorage(itinerarios);
+    }
+  }, [itinerarios]);
 
   const listaFiltrada = useMemo(() => {
     return itinerarios
@@ -164,19 +191,57 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
         colorTema: formulario.colorTema,
       };
 
-      const url = editandoId ? `/api/itinerarios/${editandoId}` : "/api/itinerarios";
-      const metodo = editandoId ? "PUT" : "POST";
-      const respuesta = await fetch(url, {
-        method: metodo,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      let actualizado: Itinerario;
+      
+      try {
+        const url = editandoId ? `/api/itinerarios/${editandoId}` : "/api/itinerarios";
+        const metodo = editandoId ? "PUT" : "POST";
+        const respuesta = await fetch(url, {
+          method: metodo,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (!respuesta.ok) {
-        throw new Error("No se pudo guardar el itinerario");
+        if (!respuesta.ok) {
+          throw new Error("No se pudo guardar el itinerario");
+        }
+
+        actualizado = await respuesta.json();
+        setUsingLocalStorage(false);
+      } catch (apiError) {
+        // Fallback to localStorage if API fails
+        console.error("API failed, using localStorage:", apiError);
+        
+        if (editandoId) {
+          // Update existing
+          const existing = itinerarios.find(it => it.id === editandoId);
+          if (!existing) throw new Error("Itinerario no encontrado");
+          
+          actualizado = {
+            ...existing,
+            ...payload,
+            actualizadoEn: new Date().toISOString(),
+          };
+        } else {
+          // Create new with temporary ID
+          actualizado = {
+            id: generateTempId(),
+            ...payload,
+            actividades: [],
+            creadoEn: new Date().toISOString(),
+            actualizadoEn: new Date().toISOString(),
+          };
+        }
+        
+        setUsingLocalStorage(true);
+        mostrarMensaje(
+          editandoId 
+            ? "Itinerario actualizado en localStorage (sin conexión)" 
+            : "Itinerario guardado en localStorage (sin conexión)",
+          "info"
+        );
       }
 
-      const actualizado: Itinerario = await respuesta.json();
       startTransition(() => {
         setItinerarios((prev) => {
           if (editandoId) {
@@ -185,7 +250,11 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
           return [actualizado, ...prev];
         });
       });
-      mostrarMensaje(editandoId ? "Itinerario actualizado." : "Itinerario guardado.");
+      
+      if (!usingLocalStorage) {
+        mostrarMensaje(editandoId ? "Itinerario actualizado." : "Itinerario guardado.");
+      }
+      
       limpiarFormulario();
     } catch (error) {
       mostrarMensaje("Ocurrió un error al guardar.", "error");
@@ -216,28 +285,83 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
   async function eliminarItinerario(id: string) {
     const confirmar = window.confirm("¿Eliminar definitivamente este itinerario?");
     if (!confirmar) return;
-    const respuesta = await fetch(`/api/itinerarios/${id}`, { method: "DELETE" });
-    if (!respuesta.ok) {
-      mostrarMensaje("No se pudo eliminar.", "error");
-      return;
+    
+    try {
+      const respuesta = await fetch(`/api/itinerarios/${id}`, { method: "DELETE" });
+      if (!respuesta.ok && !isTempId(id)) {
+        throw new Error("API failed");
+      }
+      setUsingLocalStorage(false);
+    } catch (error) {
+      // If API fails but it's a temp ID or we're already using localStorage, proceed locally
+      if (!isTempId(id)) {
+        console.error("API failed, deleting from localStorage:", error);
+        setUsingLocalStorage(true);
+        mostrarMensaje("Itinerario eliminado de localStorage (sin conexión)", "info");
+      }
     }
+    
     startTransition(() => {
       setItinerarios((prev) => prev.filter((it) => it.id !== id));
     });
-    mostrarMensaje("Itinerario eliminado.");
+    
+    if (!usingLocalStorage && !isTempId(id)) {
+      mostrarMensaje("Itinerario eliminado.");
+    }
   }
 
   async function duplicarItinerario(id: string) {
-    const respuesta = await fetch(`/api/itinerarios/${id}/duplicar`, { method: "POST" });
-    if (!respuesta.ok) {
-      mostrarMensaje("No se pudo duplicar.", "error");
+    const original = itinerarios.find(it => it.id === id);
+    if (!original) {
+      mostrarMensaje("No se pudo encontrar el itinerario.", "error");
       return;
     }
-    const nuevo: Itinerario = await respuesta.json();
+    
+    let nuevo: Itinerario;
+    
+    try {
+      if (isTempId(id)) {
+        throw new Error("Cannot duplicate temp ID via API");
+      }
+      
+      const respuesta = await fetch(`/api/itinerarios/${id}/duplicar`, { method: "POST" });
+      if (!respuesta.ok) {
+        throw new Error("API failed");
+      }
+      nuevo = await respuesta.json();
+      setUsingLocalStorage(false);
+    } catch (error) {
+      // Fallback to localStorage
+      console.error("API failed, duplicating in localStorage:", error);
+      
+      nuevo = {
+        ...original,
+        id: generateTempId(),
+        nombre: `${original.nombre} (copia)`,
+        actividades: original.actividades.map(act => ({
+          ...act,
+          id: generateTempId(),
+          itinerarioId: "",
+        })),
+        creadoEn: new Date().toISOString(),
+        actualizadoEn: new Date().toISOString(),
+      };
+      nuevo.actividades = nuevo.actividades.map(act => ({
+        ...act,
+        itinerarioId: nuevo.id,
+      }));
+      
+      setUsingLocalStorage(true);
+      mostrarMensaje("Itinerario duplicado en localStorage (sin conexión)", "info");
+    }
+    
     startTransition(() => {
       setItinerarios((prev) => [nuevo, ...prev]);
     });
-    mostrarMensaje("Itinerario duplicado.");
+    
+    if (!usingLocalStorage) {
+      mostrarMensaje("Itinerario duplicado.");
+    }
   }
 
   async function manejarActividadSubmit(event: FormEvent<HTMLFormElement>, itinerarioId: string) {
@@ -258,23 +382,68 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
       return;
     }
 
-    const respuesta = await fetch(`/api/itinerarios/${itinerarioId}/actividades`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let actualizado: Itinerario;
+    
+    try {
+      if (isTempId(itinerarioId)) {
+        throw new Error("Cannot add activity to temp ID via API");
+      }
+      
+      const respuesta = await fetch(`/api/itinerarios/${itinerarioId}/actividades`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    if (!respuesta.ok) {
-      mostrarMensaje("No se pudo agregar la actividad.", "error");
-      return;
+      if (!respuesta.ok) {
+        throw new Error("API failed");
+      }
+
+      actualizado = await respuesta.json();
+      setUsingLocalStorage(false);
+    } catch (error) {
+      // Fallback to localStorage
+      console.error("API failed, adding activity to localStorage:", error);
+      
+      const itinerario = itinerarios.find(it => it.id === itinerarioId);
+      if (!itinerario) {
+        mostrarMensaje("No se pudo encontrar el itinerario.", "error");
+        return;
+      }
+      
+      const nuevaActividad: Actividad = {
+        id: generateTempId(),
+        itinerarioId: itinerarioId,
+        titulo: payload.titulo,
+        descripcion: payload.descripcion || null,
+        ubicacion: payload.ubicacion || null,
+        inicio: payload.inicio || null,
+        fin: payload.fin || null,
+        color: payload.color || "#14b8a6",
+        estado: payload.estado || "pendiente",
+        completado: false,
+        creadoEn: new Date().toISOString(),
+        actualizadoEn: new Date().toISOString(),
+      };
+      
+      actualizado = {
+        ...itinerario,
+        actividades: [...itinerario.actividades, nuevaActividad],
+        actualizadoEn: new Date().toISOString(),
+      };
+      
+      setUsingLocalStorage(true);
+      mostrarMensaje("Actividad registrada en localStorage (sin conexión)", "info");
     }
 
-    const actualizado: Itinerario = await respuesta.json();
     event.currentTarget.reset();
     startTransition(() => {
       setItinerarios((prev) => prev.map((it) => (it.id === actualizado.id ? actualizado : it)));
     });
-    mostrarMensaje("Actividad registrada.");
+    
+    if (!usingLocalStorage) {
+      mostrarMensaje("Actividad registrada.");
+    }
   }
 
   async function toggleActividad(
@@ -282,38 +451,94 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
     actividadId: string,
     estadoActual: boolean
   ) {
-    const respuesta = await fetch(
-      `/api/itinerarios/${itinerarioId}/actividades/${actividadId}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completado: !estadoActual }),
+    let actualizado: Itinerario;
+    
+    try {
+      if (isTempId(itinerarioId) || isTempId(actividadId)) {
+        throw new Error("Cannot update temp ID via API");
       }
-    );
+      
+      const respuesta = await fetch(
+        `/api/itinerarios/${itinerarioId}/actividades/${actividadId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ completado: !estadoActual }),
+        }
+      );
 
-    if (!respuesta.ok) {
-      mostrarMensaje("No se pudo actualizar la actividad.", "error");
-      return;
+      if (!respuesta.ok) {
+        throw new Error("API failed");
+      }
+
+      actualizado = await respuesta.json();
+      setUsingLocalStorage(false);
+    } catch (error) {
+      // Fallback to localStorage
+      console.error("API failed, toggling activity in localStorage:", error);
+      
+      const itinerario = itinerarios.find(it => it.id === itinerarioId);
+      if (!itinerario) {
+        mostrarMensaje("No se pudo encontrar el itinerario.", "error");
+        return;
+      }
+      
+      actualizado = {
+        ...itinerario,
+        actividades: itinerario.actividades.map(act =>
+          act.id === actividadId
+            ? { ...act, completado: !estadoActual, actualizadoEn: new Date().toISOString() }
+            : act
+        ),
+        actualizadoEn: new Date().toISOString(),
+      };
+      
+      setUsingLocalStorage(true);
     }
 
-    const actualizado: Itinerario = await respuesta.json();
     startTransition(() => {
       setItinerarios((prev) => prev.map((it) => (it.id === actualizado.id ? actualizado : it)));
     });
   }
 
   async function eliminarActividad(itinerarioId: string, actividadId: string) {
-    const respuesta = await fetch(
-      `/api/itinerarios/${itinerarioId}/actividades/${actividadId}`,
-      { method: "DELETE" }
-    );
+    let actualizado: Itinerario;
+    
+    try {
+      if (isTempId(itinerarioId) || isTempId(actividadId)) {
+        throw new Error("Cannot delete temp ID via API");
+      }
+      
+      const respuesta = await fetch(
+        `/api/itinerarios/${itinerarioId}/actividades/${actividadId}`,
+        { method: "DELETE" }
+      );
 
-    if (!respuesta.ok) {
-      mostrarMensaje("No se pudo quitar la actividad.", "error");
-      return;
+      if (!respuesta.ok) {
+        throw new Error("API failed");
+      }
+
+      actualizado = await respuesta.json();
+      setUsingLocalStorage(false);
+    } catch (error) {
+      // Fallback to localStorage
+      console.error("API failed, deleting activity from localStorage:", error);
+      
+      const itinerario = itinerarios.find(it => it.id === itinerarioId);
+      if (!itinerario) {
+        mostrarMensaje("No se pudo encontrar el itinerario.", "error");
+        return;
+      }
+      
+      actualizado = {
+        ...itinerario,
+        actividades: itinerario.actividades.filter(act => act.id !== actividadId),
+        actualizadoEn: new Date().toISOString(),
+      };
+      
+      setUsingLocalStorage(true);
     }
 
-    const actualizado: Itinerario = await respuesta.json();
     startTransition(() => {
       setItinerarios((prev) => prev.map((it) => (it.id === actualizado.id ? actualizado : it)));
     });
@@ -328,21 +553,56 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
       try {
         const contenido = JSON.parse(String(e.target?.result));
         if (!Array.isArray(contenido)) throw new Error();
+        
+        let allSucceeded = true;
+        const nuevosItinerarios: Itinerario[] = [];
+        
         for (const item of contenido) {
-          await fetch("/api/itinerarios", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          try {
+            const respuesta = await fetch("/api/itinerarios", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...item,
+                etiquetas: item.etiquetas ?? [],
+                colorTema: item.colorTema ?? "#2563eb",
+              }),
+            });
+            
+            if (respuesta.ok) {
+              const nuevo = await respuesta.json();
+              nuevosItinerarios.push(nuevo);
+            } else {
+              throw new Error("API failed");
+            }
+          } catch (apiError) {
+            allSucceeded = false;
+            // Add to localStorage with temp ID
+            const nuevoLocal: Itinerario = {
               ...item,
+              id: generateTempId(),
               etiquetas: item.etiquetas ?? [],
               colorTema: item.colorTema ?? "#2563eb",
-            }),
-          });
+              actividades: (item.actividades || []).map((act: any) => ({
+                ...act,
+                id: generateTempId(),
+              })),
+              creadoEn: new Date().toISOString(),
+              actualizadoEn: new Date().toISOString(),
+            };
+            nuevosItinerarios.push(nuevoLocal);
+          }
         }
-        const refresco = await fetch("/api/itinerarios");
-        const lista: Itinerario[] = await refresco.json();
-        setItinerarios(lista);
-        mostrarMensaje("Importación completada.");
+        
+        setItinerarios((prev) => [...nuevosItinerarios, ...prev]);
+        
+        if (allSucceeded) {
+          mostrarMensaje("Importación completada.");
+          setUsingLocalStorage(false);
+        } else {
+          mostrarMensaje("Importación completada en localStorage (sin conexión)", "info");
+          setUsingLocalStorage(true);
+        }
       } catch (error) {
         mostrarMensaje("No se pudo importar el archivo.", "error");
       } finally {
@@ -367,9 +627,19 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
   async function limpiarTodo() {
     const confirmar = window.confirm("¿Seguro que deseas vaciar toda la base?");
     if (!confirmar) return;
-    await Promise.all(
-      itinerarios.map((it) => fetch(`/api/itinerarios/${it.id}`, { method: "DELETE" }))
-    );
+    
+    try {
+      // Try to clear from API
+      const deletePromises = itinerarios
+        .filter(it => !isTempId(it.id))
+        .map((it) => fetch(`/api/itinerarios/${it.id}`, { method: "DELETE" }));
+      
+      await Promise.all(deletePromises);
+      setUsingLocalStorage(false);
+    } catch (error) {
+      console.error("API failed when clearing, will clear localStorage:", error);
+    }
+    
     setItinerarios([]);
     mostrarMensaje("Se eliminó toda la información.");
   }
@@ -384,6 +654,20 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
             Construido con Next.js, Prisma y SQLite para guardar tus viajes, actividades con franjas de
             color y reportes en español.
           </p>
+          {usingLocalStorage && (
+            <div style={{
+              marginTop: "12px",
+              padding: "12px 16px",
+              background: "linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.1))",
+              border: "2px solid rgba(251, 191, 36, 0.3)",
+              borderRadius: "8px",
+              color: "#d97706",
+              fontWeight: "600",
+              fontSize: "0.95rem"
+            }}>
+              ⚠️ Modo sin conexión - Los datos se guardan solo en localStorage
+            </div>
+          )}
         </div>
         <div className="header-actions">
           <button 
