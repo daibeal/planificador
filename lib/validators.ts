@@ -5,10 +5,13 @@ export const itinerarioSchema = z.object({
   destino: z.string({ required_error: "El destino es obligatorio" }).min(3),
   fechaInicio: z.coerce.date(),
   fechaFin: z.coerce.date(),
-  presupuesto: z.union([z.coerce.number().int().nonnegative(), z.null()]).optional(),
-  transporte: z.string().optional().default("Avión"),
-  hospedaje: z.string().optional().default(""),
-  notas: z.string().optional().default(""),
+  presupuesto: z.preprocess(
+    (val) => val === null || val === undefined ? null : Number(val),
+    z.union([z.number().int().nonnegative(), z.null()])
+  ).optional(),
+  transporte: z.string().nullable().optional().default("Avión"),
+  hospedaje: z.string().nullable().optional().default(""),
+  notas: z.string().nullable().optional().default(""),
   etiquetas: z.array(z.string()).optional().default([]),
   prioridad: z.enum(["alta", "media", "baja"]).default("media"),
   estadoManual: z.enum(["planificado", "enCurso", "finalizado", "archivado"]).default("planificado"),
