@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { toDTO } from "@/lib/serializers";
 
-export const dynamic = 'force-dynamic';
-
 const includeCompleto = {
   actividades: {
     orderBy: { inicio: "asc" as const },

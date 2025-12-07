@@ -5,8 +5,6 @@ import { actividadUpdateSchema } from "@/lib/validators";
 import { toDTO } from "@/lib/serializers";
 import type { z } from "zod";
 
-export const dynamic = 'force-dynamic';
-
 const includeCompleto = {
   actividades: {
     orderBy: { inicio: "asc" as const },

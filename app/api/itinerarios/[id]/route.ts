@@ -5,8 +5,6 @@ import { toDTO } from "@/lib/serializers";
 import { itinerarioUpdateSchema } from "@/lib/validators";
 import type { z } from "zod";
 
-export const dynamic = 'force-dynamic';
-
 const includeCompleto = {
   actividades: {
     orderBy: { inicio: "asc" as const },

@@ -4,8 +4,6 @@ import prisma from "@/lib/prisma";
 import { actividadSchema } from "@/lib/validators";
 import { toDTO } from "@/lib/serializers";
 
-export const dynamic = 'force-dynamic';
-
 const includeCompleto = {
   actividades: {
     orderBy: { inicio: "asc" as const },
