@@ -17,6 +17,31 @@ export interface Actividad {
   actualizadoEn: string;
 }
 
+export interface Viajero {
+  nombre: string;
+  documento: string;
+  telefono?: string;
+}
+
+export interface DocumentoViaje {
+  tipo: string;
+  numero?: string;
+  vencimiento?: string;
+}
+
+export interface ContactoEmergencia {
+  nombre: string;
+  telefono: string;
+  relacion?: string;
+}
+
+export interface ItemPacking {
+  id: string;
+  nombre: string;
+  categoria: string;
+  empacado: boolean;
+}
+
 export interface Itinerario {
   id: string;
   nombre: string;
@@ -34,6 +59,22 @@ export interface Itinerario {
   creadoEn: string;
   actualizadoEn: string;
   actividades: Actividad[];
+  // Extended fields for more details
+  viajeros?: Viajero[];
+  numeroViajeros?: number | null;
+  clima?: string | null;
+  idioma?: string | null;
+  moneda?: string | null;
+  seguro?: string | null;
+  numeroSeguro?: string | null;
+  documentos?: DocumentoViaje[];
+  contactosEmergencia?: ContactoEmergencia[];
+  packingList?: ItemPacking[];
+  restricciones?: string | null;
+  vacunas?: string | null;
+  visa?: string | null;
+  paginaWeb?: string | null;
+  confirmaciones?: string | null;
 }
 
 export interface ItinerarioPayload {
@@ -49,6 +90,22 @@ export interface ItinerarioPayload {
   prioridad: Prioridad;
   estadoManual: EstadoManual;
   colorTema: string;
+  // Extended fields
+  viajeros?: Viajero[];
+  numeroViajeros?: number | null;
+  clima?: string | null;
+  idioma?: string | null;
+  moneda?: string | null;
+  seguro?: string | null;
+  numeroSeguro?: string | null;
+  documentos?: DocumentoViaje[];
+  contactosEmergencia?: ContactoEmergencia[];
+  packingList?: ItemPacking[];
+  restricciones?: string | null;
+  vacunas?: string | null;
+  visa?: string | null;
+  paginaWeb?: string | null;
+  confirmaciones?: string | null;
 }
 
 export interface ActividadPayload {
