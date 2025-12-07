@@ -128,7 +128,7 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
 
   function mostrarMensaje(texto: string, tipo: "info" | "error" = "info") {
     setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje(null), 4500);
+    setTimeout(() => setMensaje(null), 5000);
   }
 
   function limpiarFormulario() {
@@ -386,14 +386,26 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
           </p>
         </div>
         <div className="header-actions">
-          <button className="btn secundario" onClick={exportarJSON}>
-            Exportar JSON
+          <button 
+            className="btn secundario" 
+            onClick={exportarJSON}
+            title="Descargar todos los itinerarios como archivo JSON"
+          >
+            💾 Exportar JSON
           </button>
-          <button className="btn primario" onClick={() => document.getElementById("archivoImportacion")?.click()}>
-            Importar JSON
+          <button 
+            className="btn primario" 
+            onClick={() => document.getElementById("archivoImportacion")?.click()}
+            title="Importar itinerarios desde un archivo JSON"
+          >
+            📥 Importar JSON
           </button>
-          <button className="btn peligro" onClick={limpiarTodo}>
-            Limpiar base
+          <button 
+            className="btn peligro" 
+            onClick={limpiarTodo}
+            title="⚠️ Eliminar TODOS los itinerarios permanentemente"
+          >
+            🗑️ Limpiar base de datos
           </button>
           <input
             id="archivoImportacion"
@@ -406,7 +418,9 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
       </header>
 
       {mensaje && (
-        <div className={clsx("alerta", mensaje.tipo === "error" && "error")}>{mensaje.texto}</div>
+        <div className={clsx("alerta", mensaje.tipo === "error" && "error", mensaje.tipo === "info" && "exito")}>
+          {mensaje.texto}
+        </div>
       )}
 
       <section className="panel" id="panel-formulario">
@@ -537,7 +551,16 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
               Cancelar
             </button>
             <button type="submit" className="btn primario" disabled={enviando || isPending}>
-              {enviando ? "Guardando..." : editandoId ? "Actualizar" : "Guardar"}
+              {enviando ? (
+                <>
+                  <span className="loading" style={{ marginRight: "8px", display: "inline-block" }}></span>
+                  Guardando...
+                </>
+              ) : editandoId ? (
+                "Actualizar itinerario"
+              ) : (
+                "Guardar nuevo itinerario"
+              )}
             </button>
           </div>
         </form>
@@ -612,24 +635,46 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
         </div>
         <div className="resumen-grid">
           <article>
-            <p className="etiqueta">Total</p>
+            <p className="etiqueta">📊 Total de itinerarios</p>
             <strong>{resumen.total}</strong>
-            <span>Itinerarios guardados</span>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+              {resumen.total === 0 
+                ? "Aún no hay itinerarios creados" 
+                : resumen.total === 1 
+                ? "Itinerario guardado" 
+                : "Itinerarios guardados"}
+            </span>
           </article>
           <article>
-            <p className="etiqueta">Próximos 30 días</p>
+            <p className="etiqueta">⏰ Próximos 30 días</p>
             <strong>{resumen.proximos}</strong>
-            <span>Viajes que inician pronto</span>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+              {resumen.proximos === 0 
+                ? "No hay viajes próximos" 
+                : resumen.proximos === 1 
+                ? "Viaje que inicia pronto" 
+                : "Viajes que inician pronto"}
+            </span>
           </article>
           <article>
-            <p className="etiqueta">Presupuesto combinado</p>
+            <p className="etiqueta">💰 Presupuesto total</p>
             <strong>${resumen.presupuesto.toLocaleString()}</strong>
-            <span>USD considerados</span>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+              {resumen.presupuesto === 0 
+                ? "Sin presupuesto definido" 
+                : "USD considerados en total"}
+            </span>
           </article>
           <article>
-            <p className="etiqueta">Paletas activas</p>
+            <p className="etiqueta">🎨 Paletas de colores</p>
             <strong>{resumen.paletas}</strong>
-            <span>Colores usados en franjas</span>
+            <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+              {resumen.paletas === 0 
+                ? "Sin colores asignados" 
+                : resumen.paletas === 1 
+                ? "Color único en uso" 
+                : "Colores diferentes usados"}
+            </span>
           </article>
         </div>
       </section>
@@ -645,7 +690,20 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
         </div>
         <div className={clsx("lista-itinerarios", !listaFiltrada.length && "vacio")}>
           {!listaFiltrada.length ? (
-            <p>No hay coincidencias con los filtros actuales.</p>
+            <div style={{ 
+              textAlign: "center", 
+              padding: "48px 24px",
+              color: "var(--muted)"
+            }}>
+              <p style={{ fontSize: "1.2rem", marginBottom: "8px" }}>
+                🔍 No se encontraron resultados
+              </p>
+              <p style={{ fontSize: "0.95rem" }}>
+                {itinerarios.length === 0 
+                  ? "Comienza creando tu primer itinerario arriba." 
+                  : "Intenta ajustar los filtros para ver más resultados."}
+              </p>
+            </div>
           ) : (
             listaFiltrada.map((itinerario) => (
               <article
@@ -673,45 +731,101 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
                     <span className="chip">
                       {estadosLegibles[itinerario.estadoManual]} · {estadoTemporal(itinerario)}
                     </span>
-                    <button className="btn texto" onClick={() => duplicarItinerario(itinerario.id)}>
-                      Duplicar
+                    <button 
+                      className="btn texto" 
+                      onClick={() => duplicarItinerario(itinerario.id)}
+                      title="Crear una copia de este itinerario"
+                    >
+                      📋 Duplicar
                     </button>
-                    <button className="btn texto" onClick={() => iniciarEdicion(itinerario)}>
-                      Editar
+                    <button 
+                      className="btn texto" 
+                      onClick={() => iniciarEdicion(itinerario)}
+                      title="Modificar este itinerario"
+                    >
+                      ✏️ Editar
                     </button>
                     <button
                       className="btn texto peligro"
                       onClick={() => eliminarItinerario(itinerario.id)}
+                      title="Eliminar permanentemente este itinerario"
                     >
-                      Eliminar
+                      🗑️ Eliminar
                     </button>
                   </div>
                 </header>
 
                 <div className="detalles">
-                  <p>
-                    <strong>Duración:</strong>{" "}
+                  <p style={{ 
+                    padding: "12px",
+                    background: "linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(139, 92, 246, 0.05))",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(37, 99, 235, 0.1)"
+                  }}>
+                    <strong>⏱️ Duración:</strong>{" "}
                     {differenceInCalendarDays(
                       parseISO(itinerario.fechaFin),
                       parseISO(itinerario.fechaInicio)
                     ) + 1}{" "}
-                    días
+                    {differenceInCalendarDays(
+                      parseISO(itinerario.fechaFin),
+                      parseISO(itinerario.fechaInicio)
+                    ) + 1 === 1 ? "día" : "días"}
                   </p>
-                  <p>
-                    <strong>Presupuesto:</strong> $
+                  <p style={{ 
+                    padding: "12px",
+                    background: "linear-gradient(135deg, rgba(16, 185, 129, 0.05), rgba(34, 197, 94, 0.05))",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(16, 185, 129, 0.1)"
+                  }}>
+                    <strong>💰 Presupuesto:</strong> $
                     {(itinerario.presupuesto ?? 0).toLocaleString()}
+                    {itinerario.presupuesto && itinerario.presupuesto > 0 && (
+                      <span style={{ 
+                        display: "block",
+                        fontSize: "0.85rem",
+                        color: "var(--muted)",
+                        marginTop: "4px"
+                      }}>
+                        ~${Math.round((itinerario.presupuesto ?? 0) / (differenceInCalendarDays(
+                          parseISO(itinerario.fechaFin),
+                          parseISO(itinerario.fechaInicio)
+                        ) + 1))} por día
+                      </span>
+                    )}
                   </p>
-                  <p>
-                    <strong>Transporte:</strong> {itinerario.transporte || "Sin definir"}
+                  <p style={{ 
+                    padding: "12px",
+                    background: "linear-gradient(135deg, rgba(139, 92, 246, 0.05), rgba(236, 72, 153, 0.05))",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(139, 92, 246, 0.1)"
+                  }}>
+                    <strong>✈️ Transporte:</strong> {itinerario.transporte || "Sin definir"}
                   </p>
-                  <p>
-                    <strong>Hospedaje:</strong> {itinerario.hospedaje || "Pendiente"}
+                  <p style={{ 
+                    padding: "12px",
+                    background: "linear-gradient(135deg, rgba(20, 184, 166, 0.05), rgba(14, 165, 233, 0.05))",
+                    borderRadius: "10px",
+                    border: "1px solid rgba(20, 184, 166, 0.1)"
+                  }}>
+                    <strong>🏨 Hospedaje:</strong> {itinerario.hospedaje || "Pendiente"}
                   </p>
                 </div>
 
-                <div className="indicador-color" style={{ color: itinerario.colorTema }}>
-                  <span style={{ backgroundColor: itinerario.colorTema }} />
-                  Paleta principal para franjas temporales
+                <div className="indicador-color" style={{ 
+                  color: itinerario.colorTema,
+                  padding: "12px 16px",
+                  background: `linear-gradient(135deg, ${itinerario.colorTema}15, ${itinerario.colorTema}25)`,
+                  borderRadius: "12px",
+                  border: `2px solid ${itinerario.colorTema}30`
+                }}>
+                  <span style={{ 
+                    backgroundColor: itinerario.colorTema,
+                    width: "32px",
+                    height: "12px",
+                    boxShadow: `0 2px 8px ${itinerario.colorTema}50`
+                  }} />
+                  🎨 Paleta principal para franjas temporales: {itinerario.colorTema}
                 </div>
 
                 {itinerario.etiquetas.length > 0 && (
@@ -726,29 +840,82 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
 
                 <section className="actividades">
                   <div className="actividades-header">
-                    <h4>Agenda y franjas de color</h4>
-                    <span>
+                    <h4>📅 Agenda y franjas de color</h4>
+                    <span style={{ 
+                      background: "linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(139, 92, 246, 0.1))",
+                      padding: "6px 14px",
+                      borderRadius: "20px",
+                      fontSize: "0.9rem",
+                      fontWeight: "600",
+                      color: "var(--primario-oscuro)"
+                    }}>
                       {itinerario.actividades.length} actividad
                       {itinerario.actividades.length === 1 ? "" : "es"}
                     </span>
                   </div>
                   <ul className="lista-actividades">
                     {itinerario.actividades.length === 0 ? (
-                      <li>Sin franjas registradas todavía.</li>
+                      <li style={{ 
+                        textAlign: "center", 
+                        padding: "24px",
+                        color: "var(--muted)",
+                        fontStyle: "italic"
+                      }}>
+                        ✨ Sin franjas registradas todavía. Agrega tu primera actividad abajo.
+                      </li>
                     ) : (
                       itinerario.actividades.map((actividad) => (
-                        <li key={actividad.id}>
+                        <li 
+                          key={actividad.id}
+                          style={{ 
+                            "--actividad-color": actividad.color || itinerario.colorTema 
+                          } as React.CSSProperties}
+                        >
                           <div className="actividad-datos">
-                            <strong>{actividad.titulo}</strong>
-                            <small>{resumenActividad(actividad)}</small>
-                            {actividad.descripcion && <small>{actividad.descripcion}</small>}
+                            <strong style={{ 
+                              fontSize: "1.05rem",
+                              color: "var(--texto)",
+                              marginBottom: "4px"
+                            }}>
+                              {actividad.titulo}
+                            </strong>
+                            <small style={{ 
+                              color: "var(--muted)",
+                              fontSize: "0.9rem"
+                            }}>
+                              {resumenActividad(actividad)}
+                            </small>
+                            {actividad.descripcion && (
+                              <small style={{ 
+                                color: "var(--muted)",
+                                fontSize: "0.85rem",
+                                marginTop: "4px"
+                              }}>
+                                📝 {actividad.descripcion}
+                              </small>
+                            )}
+                            {actividad.ubicacion && (
+                              <small style={{ 
+                                color: "var(--primario)",
+                                fontSize: "0.85rem",
+                                marginTop: "2px"
+                              }}>
+                                📍 {actividad.ubicacion}
+                              </small>
+                            )}
                           </div>
                           <div className="actividad-acciones">
                             <span
                               className="color-preview"
                               style={{ backgroundColor: actividad.color || itinerario.colorTema }}
+                              title={`Color: ${actividad.color || itinerario.colorTema}`}
                             />
-                            <label>
+                            <label style={{ 
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              cursor: "pointer"
+                            }}>
                               <input
                                 type="checkbox"
                                 checked={actividad.completado}
@@ -760,14 +927,20 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
                                   )
                                 }
                               />
-                              <small>{actividad.completado ? "Listo" : "Pendiente"}</small>
+                              <small style={{ 
+                                fontWeight: actividad.completado ? "600" : "400",
+                                color: actividad.completado ? "var(--exito)" : "var(--muted)"
+                              }}>
+                                {actividad.completado ? "✅ Completado" : "⏳ Pendiente"}
+                              </small>
                             </label>
                             <button
                               type="button"
                               className="btn texto peligro"
                               onClick={() => eliminarActividad(itinerario.id, actividad.id)}
+                              title="Eliminar esta actividad"
                             >
-                              Quitar
+                              🗑️ Eliminar
                             </button>
                           </div>
                         </li>
@@ -791,8 +964,8 @@ export default function ItinerarioDashboard({ initialItinerarios }: Props) {
                       <option value="completado">Completado</option>
                       <option value="cancelado">Cancelado</option>
                     </select>
-                    <button className="btn secundario" type="submit">
-                      Agregar franja
+                    <button className="btn secundario" type="submit" style={{ gridColumn: "1 / -1" }}>
+                      ➕ Agregar nueva actividad
                     </button>
                   </form>
                 </section>
