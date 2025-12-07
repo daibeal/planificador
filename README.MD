@@ -196,6 +196,8 @@ La aplicación está lista para desplegarse en plataformas como:
 - Railway
 - Cualquier plataforma que soporte Node.js
 
+> **Importante:** Este proyecto utiliza Prisma y rutas dinámicas del App Router, por lo que no es compatible con despliegues estáticos (GitHub Pages / `next export`). Usa un proveedor con entorno Node.js.
+
 ### Variables de Entorno
 No se requieren variables de entorno adicionales para desarrollo local. SQLite se inicializa automáticamente.
 
